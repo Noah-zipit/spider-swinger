@@ -199,19 +199,38 @@ const engine = new Engine(GODOT_CONFIG);
 		}
 	} else {
 		setStatusMode('progress');
-		engine.startGame({
-			'onProgress': function (current, total) {
-				if (current > 0 && total > 0) {
-					statusProgress.value = current;
-					statusProgress.max = total;
-				} else {
-					statusProgress.removeAttribute('value');
-					statusProgress.removeAttribute('max');
+		// The wasm is split into parts (host file-size limits); a service
+		// worker reassembles it transparently. Wait for the worker first.
+		(async () => {
+			try {
+				if ('serviceWorker' in navigator) {
+					await navigator.serviceWorker.register('sw.js');
+					await navigator.serviceWorker.ready;
+					if (!navigator.serviceWorker.controller && !sessionStorage.getItem('swr')) {
+						// First visit: let the worker take control, then reload once.
+						sessionStorage.setItem('swr', '1');
+						location.reload();
+						return;
+					}
 				}
-			},
-		}).then(() => {
-			setStatusMode('hidden');
-		}, displayFailureNotice);
+			} catch (e) {
+				console.warn('SW registration failed, continuing anyway', e);
+			}
+			engine.startGame({
+				'onProgress': function (current, total) {
+					if (current > 0 && total > 0) {
+						statusProgress.value = current;
+						statusProgress.max = total;
+					} else {
+						statusProgress.removeAttribute('value');
+						statusProgress.removeAttribute('max');
+					}
+				},
+			}).then(() => {
+				setStatusMode('hidden');
+			}, displayFailureNotice);
+		})();
+	}
 	}
 }());
 		</script>
